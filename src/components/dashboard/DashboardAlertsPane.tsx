@@ -1,39 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertTriangle, Bell, Loader2, MessageCircle, CheckCircle2, Ban, PlayCircle } from 'lucide-react';
+import { AlertTriangle, Bell, Loader2, MessageCircle } from 'lucide-react';
 import { cn, timeAgo, getDepartmentLabel, ALERT_TYPE_LABEL } from '@/lib/utils';
-import type { IAlert, IUser, IProject, Department } from '@/types';
+import type { IAlert, IProject, IUser } from '@/types';
 import { AlertType } from '@/types';
 import { useAlerts } from '@/lib/client-data';
 
-interface DashboardCharts {
-  tasksByDepartment: Array<{
-    department: string;
-    total: number;
-    done: number;
-    inProgress: number;
-    todo: number;
-    completionRate: number;
-  }>;
-  completionTrend: Array<{ date: string; completed: number; created: number }>;
-  avgCompletionByDept: Record<string, number>;
-}
-
 interface DashboardMetricsData {
   metrics: {
-    totalActiveProjects: number;
-    projectsOnHold: number;
-    projectsCompleted: number;
-    overdueProjects: number;
-    taskCompletionRate: Record<Department, number>;
-    avgTaskCompletionTime: number;
+    taskCompletionRate: Record<string, number>;
     alertFrequency: Record<AlertType, number>;
-    bottleneckDepartment: Department | null;
     activeAlertCount: number;
   };
-  charts: DashboardCharts;
-  overdueByDept?: Record<string, number>;
+  charts: {
+    tasksByDepartment: Array<{
+      department: string;
+    }>;
+  };
 }
 
 export function DashboardAlertsPane({
@@ -63,6 +47,8 @@ export function DashboardAlertsPane({
         (a, b) => (data.metrics.taskCompletionRate[b.department] || 0) - (data.metrics.taskCompletionRate[a.department] || 0)
       )
     : [];
+
+  const activeAlertCount = data?.metrics?.alertFrequency ? Object.values(data.metrics.alertFrequency).reduce((s, v) => s + v, 0) : 0;
 
   return (
     <div className="border border-primary-200">
@@ -119,7 +105,7 @@ export function DashboardAlertsPane({
                 return (
                   <Link
                     key={alert._id}
-                    href={`/alerts`}
+                    href="/alerts"
                     className={cn(
                       'block px-4 py-2.5 transition-colors hover:bg-primary-50 border-l-2',
                       getAlertSeverityColor(alert.severity)
@@ -174,7 +160,7 @@ export function DashboardAlertsPane({
             {sortedDepts.map(({ department: dept }) => {
               const rate = data.metrics.taskCompletionRate[dept] || 0;
               return (
-                <div key={dept}>
+                <Link key={dept} href={`/tasks/departments/${dept}`} className="block">
                   <div className="flex items-center justify-between text-[10px] font-mono mb-0.5">
                     <span className="text-dark-600 truncate">{getDepartmentLabel(dept)}</span>
                     <span className={cn('font-bold', rate === 100 ? 'text-green-600' : rate < 30 ? 'text-red-500' : 'text-dark-500')}>
@@ -183,11 +169,11 @@ export function DashboardAlertsPane({
                   </div>
                   <div className="h-1.5 bg-primary-100 overflow-hidden">
                     <div
-                      className={cn('h-full transition-all', rate === 100 ? 'bg-green-500' : rate < 30 ? 'bg-red-500' : 'bg-dark-500')}
+                      className={cn('h-full transition-all hover:bg-primary-200', rate === 100 ? 'bg-green-500' : rate < 30 ? 'bg-red-500' : 'bg-dark-500')}
                       style={{ width: `${rate}%` }}
                     />
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
@@ -204,13 +190,17 @@ export function DashboardAlertsPane({
             {Object.values(AlertType).map((type) => {
               const count = data.metrics.alertFrequency[type] || 0;
               return (
-                <div key={type} className={cn(
-                  'p-2 border text-center',
-                  count > 0 ? 'border-red-200 bg-red-50/50' : 'border-primary-100'
-                )}>
+                <Link
+                  key={type}
+                  href={`/alerts?type=${type}`}
+                  className={cn(
+                    'p-2 border text-center transition-colors hover:bg-primary-50',
+                    count > 0 ? 'border-red-200 bg-red-50/50' : 'border-primary-100'
+                  )}
+                >
                   <p className="text-[8px] font-mono text-primary-500 uppercase truncate">{ALERT_TYPE_LABEL[type]}</p>
                   <p className={cn('text-sm font-black font-mono', count > 0 ? 'text-red-600' : 'text-primary-300')}>{count}</p>
-                </div>
+                </Link>
               );
             })}
           </div>

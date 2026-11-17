@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { AlertTriangle, TrendingUp, Clock, Layers, Zap, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn, getDepartmentLabel } from '@/lib/utils';
 import { Department } from '@/types';
@@ -112,31 +113,32 @@ export function DashboardMetrics({
     <div className="space-y-6">
       {/* KPI Row — 4 compact cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="border border-primary-200 p-3">
+        <Link href="/projects" className="block border border-primary-200 p-3 hover:bg-primary-50 transition-colors rounded-sm">
           <div className="flex items-center gap-1.5 text-primary-500 mb-1">
             <Layers className="w-3 h-3" />
             <span className="text-[9px] font-mono uppercase tracking-widest">Active</span>
           </div>
           <p className="text-2xl font-black font-mono text-dark-500">{metrics.totalActiveProjects}</p>
-        </div>
-        <div className="border border-primary-200 p-3">
+        </Link>
+        <Link href="/tasks" className="block border border-primary-200 p-3 hover:bg-primary-50 transition-colors rounded-sm">
           <div className="flex items-center gap-1.5 mb-1">
             <Clock className="w-3 h-3 text-red-500" />
             <span className="text-[9px] font-mono uppercase tracking-widest text-red-600">Overdue</span>
           </div>
           <p className="text-2xl font-black font-mono text-red-600">{metrics.overdueProjects}</p>
-        </div>
-        <div className="border border-primary-200 p-3">
+        </Link>
+        <Link href="/projects" className="block border border-primary-200 p-3 hover:bg-primary-50 transition-colors rounded-sm">
           <div className="flex items-center gap-1.5 text-primary-500 mb-1">
             <TrendingUp className="w-3 h-3" />
             <span className="text-[9px] font-mono uppercase tracking-widest">Avg Time</span>
           </div>
           <p className="text-2xl font-black font-mono text-dark-500">{metrics.avgTaskCompletionTime}<span className="text-sm text-primary-400">h</span></p>
-        </div>
-        <div className={cn(
-          'border p-3',
-          metrics.activeAlertCount > 0 ? 'border-red-300 bg-red-50/50' : 'border-primary-200'
-        )}>
+        </Link>
+        <Link href="/alerts"
+          className={cn(
+            'block border p-3 transition-colors hover:bg-red-50 rounded-sm',
+            metrics.activeAlertCount > 0 ? 'border-red-300 bg-red-50/50' : 'border-primary-200'
+          )}>
           <div className="flex items-center gap-1.5 mb-1">
             <AlertTriangle className={cn('w-3 h-3', metrics.activeAlertCount > 0 ? 'text-red-500' : 'text-primary-300')} />
             <span className={cn('text-[9px] font-mono uppercase tracking-widest', metrics.activeAlertCount > 0 ? 'text-red-600' : 'text-primary-400')}>Alerts</span>
@@ -144,7 +146,7 @@ export function DashboardMetrics({
           <p className={cn('text-2xl font-black font-mono', metrics.activeAlertCount > 0 ? 'text-red-600' : 'text-primary-300')}>
             {metrics.activeAlertCount}
           </p>
-        </div>
+        </Link>
       </div>
 
       {/* Bottleneck */}
@@ -173,10 +175,11 @@ export function DashboardMetrics({
               .map(([dept, count]) => {
                 const isCurrent = currentDepartment && currentDepartment === dept;
                 return (
-                  <div
+                  <Link
                     key={dept}
+                    href={`/tasks/departments/${dept}`}
                     className={cn(
-                      'px-3 py-1.5 border flex items-center gap-2 text-[11px] font-mono',
+                      'px-3 py-1.5 border flex items-center gap-2 text-[11px] font-mono transition-colors hover:bg-red-100',
                       isCurrent ? 'border-red-400 bg-red-100' : 'border-red-200 bg-white'
                     )}
                   >
@@ -185,7 +188,7 @@ export function DashboardMetrics({
                     </span>
                     <span className="text-red-600 font-bold">{count}</span>
                     <span className="text-[9px] text-red-500">overdue</span>
-                  </div>
+                  </Link>
                 );
               })}
           </div>

@@ -1,11 +1,13 @@
 import { getCurrentUser } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DashboardMetrics } from '@/components/dashboard/DashboardMetrics';
 import { DashboardAlertsPane } from '@/components/dashboard/DashboardAlertsPane';
 import { getDashboardData, serialize } from '@/lib/server-data';
 import { UserRole } from '@/types';
 import { getDepartmentLabel } from '@/lib/utils';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -85,16 +87,16 @@ export default async function DashboardPage() {
                 const inProgPct = total > 0 ? (inProgress / total) * 100 : 0;
 
                 return (
-                  <div key={dept}>
+                  <Link key={dept} href={`/tasks/departments/${dept}`} className="block">
                     <div className="flex items-center justify-between text-[9px] font-mono mb-0.5">
                       <span className="text-dark-400">{getDepartmentLabel(dept)}</span>
                       <span className="text-primary-400">{done}/{total}</span>
                     </div>
                     <div className="h-4 bg-primary-100 overflow-hidden flex">
-                      {inProgPct > 0 && <div className="h-full bg-primary-400 transition-all" style={{ width: `${inProgPct}%` }} />}
-                      {donePct > 0 && <div className="h-full bg-dark-500 transition-all" style={{ width: `${donePct}%` }} />}
+                      {inProgPct > 0 && <div className="h-full bg-primary-400 transition-all hover:bg-primary-300" style={{ width: `${inProgPct}%` }} />}
+                      {donePct > 0 && <div className="h-full bg-dark-500 transition-all hover:bg-dark-400" style={{ width: `${donePct}%` }} />}
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
