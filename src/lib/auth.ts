@@ -166,8 +166,10 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<IUs
     try {
       clerkUserData = await client.users.getUser(clerkUserId);
     } catch (clerkErr) {
+      // The user *is* signed in; Clerk's API just failed. Throw so the page
+      // shows a retryable error instead of bouncing them to /sign-in.
       console.error(`[Auth] Clerk API fetch failed for ${clerkUserId}:`, clerkErr);
-      return null;
+      throw clerkErr;
     }
 
     const primaryEmail =
@@ -261,7 +263,12 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<IUs
 
     return user;
   } catch (error) {
+    // Only "no session" may return null — callers treat null as signed out
+    // and redirect to /sign-in. A DB timeout or Clerk outage (common on the
+    // first request after the app sat idle) must not look like a sign-out,
+    // so surface it: pages render the retryable error boundary and API
+    // routes answer 500 via withAuth.
     console.error("[getCurrentUser Error]", error);
-    return null;
+    throw error;
   }
 });

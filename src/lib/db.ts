@@ -27,6 +27,21 @@ export async function connectDB(): Promise<typeof mongoose> {
     return cached.conn;
   }
 
+  try {
+    return await connectOnce();
+  } catch (firstError) {
+    // A cold function instance (first request after the app sat idle) can
+    // miss the server-selection window once. Retry before failing the request.
+    console.warn('[DB] Connection attempt failed, retrying once:', firstError);
+    return connectOnce();
+  }
+}
+
+async function connectOnce(): Promise<typeof mongoose> {
+  if (cached.conn) {
+    return cached.conn;
+  }
+
   if (!cached.promise) {
     // Tuned for serverless (Vercel): every function instance has its own
     // pool. A large pool × many instances exhausts the Atlas connection limit
@@ -36,7 +51,7 @@ export async function connectDB(): Promise<typeof mongoose> {
       maxPoolSize: 10,
       minPoolSize: 1,
       maxIdleTimeMS: 60000,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 8000,
       socketTimeoutMS: 45000,
       retryWrites: true,
       retryReads: true,
