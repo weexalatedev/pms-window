@@ -49,3 +49,5 @@ build/
 
 # Clerk / auth
 clerk-*.json
+.vercel
+.env*

@@ -671,11 +671,11 @@ function AlertRow({
     (isAdmin || alert.affectedDepartments.includes(currentUserDept));
   const canResolve = isAdmin && isAcknowledged;
 
-  const raisedBy = typeof alert.raisedBy === 'object' && 'name' in alert.raisedBy
+  const raisedBy = alert.raisedBy !== null && typeof alert.raisedBy === 'object' && 'name' in alert.raisedBy
     ? (alert.raisedBy as { name: string }).name
     : 'Admin';
 
-  const project = typeof alert.projectId === 'object' && 'projectTitle' in alert.projectId
+  const project = alert.projectId !== null && typeof alert.projectId === 'object' && 'projectTitle' in alert.projectId
     ? alert.projectId as { projectTitle: string; _id: string }
     : null;
 

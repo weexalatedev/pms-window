@@ -4,6 +4,7 @@ import ClerkAppProvider from '@/components/ClerkAppProvider';
 import { SWRProvider } from '@/components/SWRProvider';
 import './globals.css';
 import FCMProvider from '@/components/FCMProvider';
+import { PushNotificationBanner } from '@/components/notifications/PushNotificationBanner';
 
 export const metadata: Metadata = {
   title: 'Unique Arts PMS — Production Management System',
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ClerkAppProvider>
           <SWRProvider>
             <FCMProvider />
+            <PushNotificationBanner />
             {children}
           </SWRProvider>
         </ClerkAppProvider>
