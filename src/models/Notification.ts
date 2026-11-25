@@ -41,6 +41,10 @@ const NotificationSchema = new Schema<INotificationDocument>(
 // Compound index for efficient querying
 NotificationSchema.index({ userId: 1, read: 1, createdAt: -1 });
 NotificationSchema.index({ userId: 1, dismissed: 1, createdAt: -1 });
+// Push burst detection (recent notifications per user).
+NotificationSchema.index({ userId: 1, createdAt: -1 });
+// Daily digest de-duplication (one TASK_PENDING per user per day).
+NotificationSchema.index({ userId: 1, type: 1, createdAt: -1 });
 
 export default mongoose.models.Notification ||
   mongoose.model<INotificationDocument>('Notification', NotificationSchema);

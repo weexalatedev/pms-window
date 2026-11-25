@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 import connectDB from '@/lib/db';
 import NotificationModel from '@/models/Notification';
 import { withAuth } from '@/lib/auth';
@@ -18,29 +19,22 @@ export const PATCH = withAuth(async (req: NextRequest, context: { params: Promis
     );
   }
 
-  const notification = await NotificationModel.findById(id);
+  if (!Types.ObjectId.isValid(id)) {
+    return NextResponse.json({ success: false, error: 'Notification not found' }, { status: 404 });
+  }
 
-  if (!notification) {
+  // Single owner-scoped update (no read-then-save round trip).
+  const result = await NotificationModel.updateOne(
+    { _id: id, userId: user._id },
+    { $set: action === 'read' ? { read: true } : { dismissed: true } }
+  );
+
+  if (result.matchedCount === 0) {
     return NextResponse.json(
       { success: false, error: 'Notification not found' },
       { status: 404 }
     );
   }
-
-  if (notification.userId.toString() !== user._id.toString()) {
-    return NextResponse.json(
-      { success: false, error: 'Unauthorized' },
-      { status: 403 }
-    );
-  }
-
-  if (action === 'read') {
-    notification.read = true;
-  } else if (action === 'dismiss') {
-    notification.dismissed = true;
-  }
-
-  await notification.save();
 
   return NextResponse.json({ success: true });
 });

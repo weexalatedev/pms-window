@@ -7,7 +7,7 @@ import { withAuth } from '@/lib/auth';
 import { ProjectStatus, TaskStatus, AlertStatus } from '@/types';
 import type { Department } from '@/types';
 import { normalizeLegacyProjectStatuses } from '@/lib/workflow';
-import { LIVE_TASKS_LOOKUP_STAGES } from '@/lib/task-archive';
+import { getArchivedProjectIds, liveTasksMatchStage } from '@/lib/task-archive';
 import { subDays } from 'date-fns';
 
 export const GET = withAuth(async (_req: NextRequest) => {
@@ -19,8 +19,9 @@ export const GET = withAuth(async (_req: NextRequest) => {
 
   // Use a single $facet aggregation to get all stats in one query.
   // Archived (completed-project) tasks are excluded — same rule as task lists.
-  const [dashboardData] = await TaskModel.aggregate([
-    ...LIVE_TASKS_LOOKUP_STAGES,
+  // Started now, awaited together with the project/alert queries below.
+  const facetPromise = TaskModel.aggregate([
+    liveTasksMatchStage(await getArchivedProjectIds()),
     {
       $facet: {
         // Task stats per department with completion rates
@@ -105,7 +106,8 @@ export const GET = withAuth(async (_req: NextRequest) => {
   ]);
 
   // Run project stats, alert stats, overdue projects, and active alerts in parallel
-  const [projectStats, alertStats, overdueProjects, activeAlerts] = await Promise.all([
+  const [[dashboardData], projectStats, alertStats, overdueProjects, activeAlerts] = await Promise.all([
+    facetPromise.exec(),
     ProjectModel.aggregate([
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]),

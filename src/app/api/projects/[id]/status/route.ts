@@ -7,6 +7,7 @@ import AlertModel from '@/models/Alert';
 import { withAuth } from '@/lib/auth';
 import { ProjectStatus, AlertStatus, TaskStatus, UserRole } from '@/types';
 import { createSystemLog } from '@/lib/workflow';
+import { invalidateArchivedProjects } from '@/lib/task-archive';
 
 const StatusSchema = z.object({
   status: z.nativeEnum(ProjectStatus),
@@ -94,6 +95,7 @@ export const POST = withAuth(
 
     project.status = newStatus;
     await project.save();
+    invalidateArchivedProjects();
 
     const logMsg = note
       ? `Status changed to "${newStatus}" by ${user.name}: ${note}`

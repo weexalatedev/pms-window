@@ -41,20 +41,23 @@ export default function FCMProvider() {
         await registerFcmTokenOnServer(token);
       };
 
-      // Foreground messages: refresh the MongoDB-backed bell immediately.
+      // Foreground messages (data-only payloads from the server).
       unsubscribe = onForegroundMessage((payload) => {
-        const notification = payload.notification;
         const data = payload.data || {};
-        if (!notification && !data.title) return;
+        const title = data.title || payload.notification?.title;
+        if (!title) return;
 
-        const title = notification?.title || data.title || 'New Notification';
-        const body = notification?.body || data.body || '';
+        const body = data.body || payload.notification?.body || '';
         const link = data.url || data.click_action || '/';
+        const priority = data.priority || 'normal';
 
-        // FCM does not render a system notification while the app is focused.
-        // Show one explicitly so foreground pushes (and the Settings test)
-        // are actually visible, then refresh the in-app bell.
+        // While the user is actively looking at the app, low-priority FYI
+        // pushes only update the bell — no system popup interrupting work.
+        const userIsLooking = document.visibilityState === 'visible' && document.hasFocus();
+        const showSystem = !(userIsLooking && priority === 'low');
+
         if (
+          showSystem &&
           typeof Notification !== 'undefined' &&
           Notification.permission === 'granted' &&
           'serviceWorker' in navigator
@@ -65,8 +68,11 @@ export default function FCMProvider() {
                 body,
                 icon: '/icons/icon-192x192.png',
                 badge: '/icons/icon-192x192.png',
+                tag: data.tag || undefined,
+                renotify: Boolean(data.tag),
+                requireInteraction: priority === 'high',
                 data: { ...data, url: link },
-              })
+              } as NotificationOptions)
             )
             .catch((error) => console.warn('[FCM] Foreground notification failed:', error));
         }
@@ -100,9 +106,15 @@ export default function FCMProvider() {
 
   // Clear the server-side token when the user signs out.
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      void import('@/lib/firebase').then(({ removeFcmToken }) => removeFcmToken());
+    if (!isLoaded || isSignedIn) return;
+    // Only devices that registered push need cleanup; this avoids loading
+    // Firebase on the sign-in page for everyone else.
+    try {
+      if (!window.localStorage.getItem('pms-fcm-token')) return;
+    } catch {
+      return;
     }
+    void import('@/lib/firebase').then(({ removeFcmToken }) => removeFcmToken());
   }, [isLoaded, isSignedIn]);
 
   return null;

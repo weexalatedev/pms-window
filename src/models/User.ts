@@ -1,6 +1,17 @@
 import mongoose, { Document, Model, Schema } from 'mongoose';
 import { Department, UserRole } from '@/types';
 
+export interface IPushToken {
+  token: string;
+  userAgent?: string;
+  lastSeenAt: Date;
+}
+
+export interface INotificationPrefs {
+  /** Notification types the user does not want as push (in-app bell still records them). */
+  mutedTypes: string[];
+}
+
 export interface IUserDocument extends Document {
   clerkId?: string;
   email: string;
@@ -9,7 +20,11 @@ export interface IUserDocument extends Document {
   department: Department;
   avatar?: string;
   isActive: boolean;
+  /** @deprecated single-device token; superseded by `fcmTokens`. Still read for delivery. */
   fcmToken?: string;
+  /** One entry per browser/device that enabled push. */
+  fcmTokens: IPushToken[];
+  notificationPrefs?: INotificationPrefs;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -54,6 +69,22 @@ const UserSchema = new Schema<IUserDocument>(
       type: String,
       default: '',
     },
+    fcmTokens: {
+      type: [
+        new Schema<IPushToken>(
+          {
+            token: { type: String, required: true },
+            userAgent: { type: String, default: '' },
+            lastSeenAt: { type: Date, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    notificationPrefs: {
+      mutedTypes: { type: [String], default: [] },
+    },
   },
   {
     timestamps: true,
@@ -65,6 +96,8 @@ const UserSchema = new Schema<IUserDocument>(
 // Indexes
 UserSchema.index({ role: 1 });
 UserSchema.index({ department: 1, isActive: 1 });
+// Lets invalid / re-assigned push tokens be pulled without scanning users.
+UserSchema.index({ 'fcmTokens.token': 1 });
 
 // Unique index on clerkId only for documents where clerkId is a non-null string
 // (partialFilterExpression is more reliable than sparse for excluding nulls)

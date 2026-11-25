@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import UserModel from "@/models/User";
@@ -121,7 +122,12 @@ export const SUPER_ADMIN_EMAILS = [
   'uav.acc1@gmail.com',
 ];
 
-export async function getCurrentUser(): Promise<IUserDocument | null> {
+/**
+ * Wrapped in React `cache()` so a page, its layout and any helpers that all
+ * call getCurrentUser() during one server render share a single lookup.
+ * (Outside a render, e.g. in route handlers, it simply runs once per call.)
+ */
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<IUserDocument | null> {
   try {
     const { clerkClient, auth } = await import("@clerk/nextjs/server");
     const clerkUser = await auth();
@@ -258,4 +264,4 @@ export async function getCurrentUser(): Promise<IUserDocument | null> {
     console.error("[getCurrentUser Error]", error);
     return null;
   }
-}
+});

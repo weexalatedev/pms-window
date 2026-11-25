@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import DepartmentModel from '@/models/Department';
 import { withAuth } from '@/lib/auth';
+import { invalidateDepartments } from '@/lib/departments';
 import { UserRole, FactoryGroup } from '@/types';
 
 // GET /api/departments
@@ -68,6 +69,7 @@ export const POST = withAuth(
       factoryGroup,
     });
 
+    invalidateDepartments();
     return NextResponse.json({ success: true, data: created });
   },
   [UserRole.SUPER_ADMIN]

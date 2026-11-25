@@ -5,6 +5,7 @@ import UserModel from '@/models/User';
 import TaskModel from '@/models/Task';
 import CommentModel from '@/models/Comment';
 import { withAuth } from '@/lib/auth';
+import { invalidateDepartments } from '@/lib/departments';
 import { updateProjectCompletion } from '@/lib/workflow';
 import { UserRole, FactoryGroup } from '@/types';
 
@@ -58,6 +59,7 @@ export const PATCH = withAuth(
       return NextResponse.json({ success: false, error: 'Department not found' }, { status: 404 });
     }
 
+    invalidateDepartments();
     return NextResponse.json({ success: true, data: updated });
   },
   [UserRole.SUPER_ADMIN]
@@ -108,6 +110,7 @@ export const DELETE = withAuth(
     }
 
     await DepartmentModel.findByIdAndDelete(id);
+    invalidateDepartments();
 
     // Best-effort: the department and its tasks are already gone, so a failure
     // to recompute completion must not surface as a failed delete.

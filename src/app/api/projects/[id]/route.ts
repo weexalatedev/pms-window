@@ -5,6 +5,7 @@ import TaskModel from '@/models/Task';
 import AlertModel from '@/models/Alert';
 import { withAuth } from '@/lib/auth';
 import { UpdateProjectSchema } from '@/lib/validations';
+import { invalidateArchivedProjects } from '@/lib/task-archive';
 import { UserRole, ProjectStatus } from '@/types';
 
 // GET /api/projects/[id]
@@ -134,6 +135,8 @@ export const PATCH = withAuth(
         if (!updated) {
           return NextResponse.json({ success: false, error: 'Update failed' }, { status: 500 });
         }
+        // Status edits can archive/unarchive the project for task lists.
+        if (parsed.data.status) invalidateArchivedProjects();
         return NextResponse.json({ success: true, data: updated });
       }
 
@@ -146,6 +149,7 @@ export const PATCH = withAuth(
       if (!updated) {
         return NextResponse.json({ success: false, error: 'Update failed' }, { status: 500 });
       }
+      if (parsed.data.status) invalidateArchivedProjects();
       return NextResponse.json({ success: true, data: updated });
     } catch (error) {
       console.error('[Project PATCH] Error:', error);
@@ -177,6 +181,7 @@ export const DELETE = withAuth(
     ]);
 
     await ProjectModel.findByIdAndDelete(id);
+    invalidateArchivedProjects();
 
     return NextResponse.json({ success: true, message: 'Project deleted' });
   },

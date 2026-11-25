@@ -5,6 +5,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhooks(.*)",
+  // Vercel Cron has no Clerk session; the route checks CRON_SECRET itself.
+  "/api/cron(.*)",
   "/api/departments(.*)",
   "/api/users/me(.*)",
   "/api/notifications(.*)",

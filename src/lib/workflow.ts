@@ -16,6 +16,7 @@ import {
 } from '@/types';
 import type { Department } from '@/types';
 import { getActiveDepartmentNames } from '@/lib/departments';
+import { invalidateArchivedProjects } from '@/lib/task-archive';
 import { ClientSession } from 'mongoose';
 
 /**
@@ -633,7 +634,10 @@ export async function normalizeLegacyTaskStatuses(projectId?: string): Promise<v
     .find({ ...scope, status: LEGACY_BLOCKED_STATUS }, { projection: { projectId: 1 } })
     .toArray();
 
-  if (legacyTasks.length === 0 && !projectId) return;
+  // Nothing legacy left: skip the alert query + project write that used to
+  // run on every project/task page load. Alert create/resolve keep
+  // `activeAlertIds` in sync on their own ($addToSet / $pull).
+  if (legacyTasks.length === 0) return;
 
   if (legacyTasks.length > 0) {
     await TaskModel.collection.updateMany(
@@ -689,11 +693,20 @@ export async function normalizeLegacyTaskStatus(taskId: string): Promise<void> {
  * still renders and can be edited. The raw collection is used because
  * `dispatched` is no longer a valid `ProjectStatus`.
  */
+let lastLegacyProjectSweep = 0;
+const LEGACY_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+
 export async function normalizeLegacyProjectStatuses(): Promise<void> {
-  await ProjectModel.collection.updateMany(
+  // Called from hot paths (dashboard, project list). Legacy data only needs
+  // sweeping occasionally, not on every request.
+  if (Date.now() - lastLegacyProjectSweep < LEGACY_SWEEP_INTERVAL_MS) return;
+  lastLegacyProjectSweep = Date.now();
+
+  const result = await ProjectModel.collection.updateMany(
     { status: LEGACY_DISPATCHED_STATUS },
     { $set: { status: ProjectStatus.COMPLETED } }
   );
+  if (result.modifiedCount > 0) invalidateArchivedProjects();
 }
 
 /**
@@ -753,6 +766,9 @@ export async function updateProjectCompletion(projectId: string): Promise<void> 
     { _id: new Types.ObjectId(projectId) },
     { $set: updateFields }
   );
+
+  // A newly completed project becomes archived — refresh the cached list.
+  if (shouldUpdateStatus) invalidateArchivedProjects();
 
   // Realtime events removed
 }
