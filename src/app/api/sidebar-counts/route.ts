@@ -4,7 +4,6 @@ import TaskModel from '@/models/Task';
 import AlertModel from '@/models/Alert';
 import DiscussionModel from '@/models/Discussion';
 import DiscussionReadModel from '@/models/DiscussionRead';
-import CommentModel from '@/models/Comment';
 import ProjectModel from '@/models/Project';
 import { withAuth } from '@/lib/auth';
 import { TaskStatus, AlertStatus, ProjectStatus, UserRole } from '@/types';
@@ -36,24 +35,11 @@ export const GET = withAuth(async (_req: NextRequest, _ctx, { user }) => {
     // Total discussions count
     DiscussionModel.countDocuments(),
 
-    // Unread discussions for this user
+    // Unread discussions for this user (= discussions with no read record).
+    // Two indexed queries instead of loading every discussion + read record.
     (async () => {
-      const discussions = await DiscussionModel.find({}, { _id: 1, createdAt: 1 }).lean();
-      const discussionIds = discussions.map((d) => d._id);
-      if (discussionIds.length === 0) return 0;
-      const readRecords = await DiscussionReadModel.find({
-        discussionId: { $in: discussionIds },
-        userId: user._id,
-      }).lean();
-      const readMap = new Map(readRecords.map((r) => [r.discussionId.toString(), r.lastReadAt.getTime()]));
-      let unread = 0;
-      for (const d of discussions) {
-        const lastRead = readMap.get(d._id.toString());
-        if (!lastRead) {
-          unread++;
-        }
-      }
-      return unread;
+      const readIds = await DiscussionReadModel.distinct('discussionId', { userId: user._id });
+      return DiscussionModel.countDocuments(readIds.length > 0 ? { _id: { $nin: readIds } } : {});
     })(),
 
     // Tasks not done (filter by dept for non-admins) — includes both project and internal tasks.

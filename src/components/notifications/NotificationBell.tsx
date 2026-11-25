@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Bell, X, CheckCheck, ExternalLink, Trash2, AlertTriangle, UserPlus, MessageSquare, ClipboardList, Lightbulb, BellRing, BellOff, Loader2 } from 'lucide-react';
 import { useInAppNotifications } from '@/hooks/useInAppNotifications';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { NotificationPreferences } from '@/components/notifications/NotificationPreferences';
 import { NotificationType } from '@/types/notifications';
 import { cn } from '@/lib/utils';
 
@@ -337,6 +338,7 @@ export function NotificationBell() {
                 </button>
               )}
             </div>
+            {push.enabled && <NotificationPreferences />}
           </div>
 
           {/* Footer */}

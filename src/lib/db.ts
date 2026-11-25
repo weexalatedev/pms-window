@@ -28,21 +28,23 @@ export async function connectDB(): Promise<typeof mongoose> {
   }
 
   if (!cached.promise) {
+    // Tuned for serverless (Vercel): every function instance has its own
+    // pool. A large pool × many instances exhausts the Atlas connection limit
+    // (500 on shared tiers), which shows up as slow or failing requests.
     const opts = {
       bufferCommands: false,
-      maxPoolSize: 50,           // Increased from 10 - handle concurrent requests better
-      minPoolSize: 5,            // Keep a minimum pool active
-      maxIdleTimeMS: 30000,      // Close idle connections after 30s
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      maxIdleTimeMS: 60000,
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
-      heartbeatFrequencyMS: 10000, // Check connection health every 10s
       retryWrites: true,
-      w: 'majority' as const,      // Ensure writes are acknowledged
-      readPreference: 'primaryPreferred' as const, // Read from primary, fallback to secondary
+      retryReads: true,
+      readPreference: 'primaryPreferred' as const,
     };
 
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      console.log('✅ MongoDB connected (pool: 50)');
+      console.log('✅ MongoDB connected');
       return mongoose;
     });
   }

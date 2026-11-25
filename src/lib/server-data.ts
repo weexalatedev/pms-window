@@ -28,7 +28,7 @@ import {
 import { subDays } from 'date-fns';
 import { ensureDefaultTaskTemplates, normalizeLegacyTaskStatuses, normalizeLegacyTaskStatus, normalizeLegacyProjectStatuses, normalizeLegacyProjectStatus } from '@/lib/workflow';
 import { getTaskStageFilter } from '@/lib/task-stage-filter';
-import { applyLiveProjectFilter, getArchivedProjectIds, LIVE_TASKS_LOOKUP_STAGES } from '@/lib/task-archive';
+import { applyLiveProjectFilter, getArchivedProjectIds, liveTasksMatchStage } from '@/lib/task-archive';
 
 // ─── Projects ────────────────────────────────────────────────────────────────
 
@@ -372,8 +372,9 @@ export async function getDashboardData() {
   // Use $facet to reduce 3 task aggregations into 1 query.
   // Archived (completed-project) tasks are excluded via a projects $lookup
   // so live dashboards only reflect active work — same rule as task lists.
-  const [dashboardData] = await TaskModel.aggregate([
-    ...LIVE_TASKS_LOOKUP_STAGES,
+  // Started now, awaited together with the project/alert queries below.
+  const facetPromise = TaskModel.aggregate([
+    liveTasksMatchStage(await getArchivedProjectIds()),
     {
       $facet: {
         tasksByDept: [
@@ -403,7 +404,8 @@ export async function getDashboardData() {
     },
   ]);
 
-  const [projectStats, alertStats, overdueProjects, activeAlerts] = await Promise.all([
+  const [[dashboardData], projectStats, alertStats, overdueProjects, activeAlerts] = await Promise.all([
+    facetPromise.exec(),
     ProjectModel.aggregate([
       { $group: { _id: '$status', count: { $sum: 1 } } },
     ]),

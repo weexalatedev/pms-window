@@ -3,6 +3,7 @@ import connectDB from '@/lib/db';
 import UserModel from '@/models/User';
 import { sendFcmPushToUsers, isFcmConfigured } from '@/lib/firebase-admin';
 import { withAuth } from '@/lib/auth';
+import { pruneInvalidTokens } from '@/lib/notifications';
 import { UserRole } from '@/types';
 
 // POST /api/test-push - Send a test push notification to all active users
@@ -37,25 +38,16 @@ export const POST = withAuth(async (req: NextRequest, _ctx, { user }) => {
     const link = body.link || '/dashboard';
     const onlyMe = body.onlyMe === true;
 
-    // Fetch target users with FCM tokens. `onlyMe` avoids spamming the team
+    // Fetch target users' device tokens. `onlyMe` avoids spamming the team
     // while testing a device.
-    const users = onlyMe
-      ? await UserModel.find({
-          _id: user._id,
-          fcmToken: { $nin: ['', null] },
-        })
-          .select('fcmToken')
-          .lean()
-      : await UserModel.find({
-          isActive: true,
-          fcmToken: { $nin: ['', null] },
-        })
-          .select('fcmToken')
-          .lean();
+    const hasToken = { $or: [{ 'fcmTokens.0': { $exists: true } }, { fcmToken: { $nin: ['', null] } }] };
+    const users = await UserModel.find(onlyMe ? { _id: user._id, ...hasToken } : { isActive: true, ...hasToken })
+      .select('fcmToken fcmTokens.token')
+      .lean();
 
-    const tokens = users
-      .map((u: { fcmToken?: string | null }) => u.fcmToken)
-      .filter((t: string | null | undefined): t is string => Boolean(t));
+    const tokens = users.flatMap((u) =>
+      [...(u.fcmTokens || []).map((t) => t.token), u.fcmToken || ''].filter(Boolean)
+    );
 
     if (tokens.length === 0) {
       return NextResponse.json(
@@ -69,11 +61,11 @@ export const POST = withAuth(async (req: NextRequest, _ctx, { user }) => {
       );
     }
 
-    // Send push notification via FCM
     const result = await sendFcmPushToUsers(tokens, title, bodyText, link, {
       type: 'test',
       source: 'test-push',
     });
+    await pruneInvalidTokens(result.invalidTokens);
 
     if (result.failed > 0 && result.success === 0) {
       return NextResponse.json(
@@ -88,10 +80,11 @@ export const POST = withAuth(async (req: NextRequest, _ctx, { user }) => {
         notificationTitle: title,
         notificationBody: bodyText,
         onlyMe,
-        totalUsers: tokens.length,
+        totalUsers: users.length,
+        devices: tokens.length,
         sent: result.success,
         failed: result.failed,
-        message: `Test push notification sent to ${result.success}/${tokens.length} users`,
+        message: `Test push delivered to ${result.success}/${tokens.length} devices (${users.length} users)`,
       },
     });
   } catch (error) {

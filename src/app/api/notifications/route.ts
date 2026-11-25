@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import NotificationModel from '@/models/Notification';
-import TaskModel from '@/models/Task';
 import { withAuth } from '@/lib/auth';
-import { TaskStatus, UserRole } from '@/types';
-import { NotificationType } from '@/types/notifications';
-import { notifyUsers } from '@/lib/notifications';
-import { getArchivedProjectIds } from '@/lib/task-archive';
+import { UserRole } from '@/types';
+import { runPendingTaskDigest } from '@/lib/notification-jobs';
 
 // GET /api/notifications — fetch current user's notifications
 export const GET = withAuth(async (req: NextRequest, _ctx, { user }) => {
@@ -27,16 +24,18 @@ export const GET = withAuth(async (req: NextRequest, _ctx, { user }) => {
     query.read = false;
   }
 
-  const notifications = await NotificationModel.find(query)
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .lean();
-
-  const unreadCount = await NotificationModel.countDocuments({
-    userId: user._id,
-    read: false,
-    dismissed: false,
-  });
+  const [notifications, unreadCount] = await Promise.all([
+    NotificationModel.find(query)
+      .select('type title body link createdAt read dismissed metadata')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean(),
+    NotificationModel.countDocuments({
+      userId: user._id,
+      read: false,
+      dismissed: false,
+    }),
+  ]);
 
   // Serialize for client
   const serialized = notifications.map((n) => {
@@ -89,7 +88,7 @@ export const POST = withAuth(async (req: NextRequest, _ctx, { user }) => {
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
-    await checkAndNotifyPendingTasks();
+    await runPendingTaskDigest();
     return NextResponse.json({ success: true });
   }
 
@@ -98,87 +97,3 @@ export const POST = withAuth(async (req: NextRequest, _ctx, { user }) => {
     { status: 400 }
   );
 });
-
-/**
- * Send one daily summary of unfinished assigned tasks to each assignee.
- */
-async function checkAndNotifyPendingTasks() {
-  const now = new Date();
-  const dueSoonLimit = new Date(now);
-  dueSoonLimit.setDate(dueSoonLimit.getDate() + 3);
-
-  // Live-only: skip tasks of completed (archived) projects.
-  const archivedIds = await getArchivedProjectIds();
-  const pendingTasks = await TaskModel.find({
-    status: { $ne: TaskStatus.DONE },
-    assignedUser: { $ne: null },
-    ...(archivedIds.length > 0
-      ? { $or: [{ projectId: null }, { projectId: { $nin: archivedIds } }] }
-      : {}),
-  })
-    .populate('assignedUser', '_id')
-    .lean();
-
-  if (pendingTasks.length === 0) return;
-
-  const userTaskMap = new Map<string, typeof pendingTasks>();
-
-  for (const task of pendingTasks) {
-    if (!task.assignedUser) continue;
-    const assignedUser = task.assignedUser as { _id?: string | { toString(): string } } | null;
-    const userId = assignedUser?._id?.toString();
-    if (!userId) continue;
-
-    const existing = userTaskMap.get(userId) || [];
-    existing.push(task);
-    userTaskMap.set(userId, existing);
-  }
-
-  // Send one notification per user summarizing their pending tasks.
-  for (const [userId, tasks] of userTaskMap.entries()) {
-    const taskCount = tasks.length;
-
-    // Send at most one pending-task summary per user each day.
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const alreadyNotified = await NotificationModel.findOne({
-      userId,
-      type: NotificationType.TASK_PENDING,
-      createdAt: { $gte: todayStart },
-    });
-
-    if (alreadyNotified) continue;
-
-    const overdueCount = tasks.filter((task) => task.dueDate && new Date(task.dueDate) < now).length;
-    const dueSoonCount = tasks.filter((task) => {
-      if (!task.dueDate) return false;
-      const dueDate = new Date(task.dueDate);
-      return dueDate >= now && dueDate <= dueSoonLimit;
-    }).length;
-
-    const title = `${taskCount} pending task${taskCount === 1 ? '' : 's'} need attention`;
-    const urgency = [
-      overdueCount > 0 ? `${overdueCount} overdue` : '',
-      dueSoonCount > 0 ? `${dueSoonCount} due within 3 days` : '',
-    ].filter(Boolean).join(', ');
-    const body = urgency
-      ? `You have ${taskCount} unfinished assigned tasks. ${urgency}.`
-      : `You have ${taskCount} unfinished assigned tasks. Review your task list when you can.`;
-
-    const hasProjectTasks = tasks.some((task) => Boolean(task.projectId));
-    const link = hasProjectTasks ? '/tasks' : '/internal-tasks';
-
-    await notifyUsers({
-      type: NotificationType.TASK_PENDING,
-      title,
-      body,
-      link,
-      userIds: [userId],
-      metadata: {
-        taskCount,
-        overdueCount,
-        dueSoonCount,
-        isInternal: !hasProjectTasks,
-      },
-    });
-  }
-}

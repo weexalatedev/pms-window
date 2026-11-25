@@ -141,16 +141,55 @@ async function registerMessagingServiceWorker(): Promise<ServiceWorkerRegistrati
   }
 }
 
-/**
- * Register (or update) the FCM token on the server for the current user.
- * Should be called after obtaining a fresh token.
- */
-export async function registerFcmTokenOnServer(token: string): Promise<boolean> {
+const TOKEN_STORAGE_KEY = 'pms-fcm-token';
+/** Re-confirm an unchanged token with the server at most once a day. */
+const TOKEN_RESYNC_MS = 24 * 60 * 60 * 1000;
+
+interface StoredToken {
+  token: string;
+  syncedAt: number;
+}
+
+function readStoredToken(): StoredToken | null {
   try {
-    const result = await apiFetch('/api/users/me', {
-      method: 'PATCH',
-      body: JSON.stringify({ fcmToken: token }),
+    const raw = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredToken) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredToken(value: StoredToken | null): void {
+  try {
+    if (value) window.localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(value));
+    else window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // Storage unavailable (private mode) — we'll just sync more often.
+  }
+}
+
+/** True when this browser has registered a push token at some point. */
+export function hasStoredFcmToken(): boolean {
+  return typeof window !== 'undefined' && readStoredToken() !== null;
+}
+
+/**
+ * Register this device's FCM token for the current user. Skips the request
+ * when the same token was already synced in the last 24h (runs on every app
+ * load, so this saves a DB write per page view). Pass `force` after an
+ * explicit "Enable" click.
+ */
+export async function registerFcmTokenOnServer(token: string, options: { force?: boolean } = {}): Promise<boolean> {
+  const stored = readStoredToken();
+  if (!options.force && stored?.token === token && Date.now() - stored.syncedAt < TOKEN_RESYNC_MS) {
+    return true;
+  }
+  try {
+    const result = await apiFetch('/api/push/token', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
     });
+    if (result.success) writeStoredToken({ token, syncedAt: Date.now() });
     return result.success;
   } catch {
     return false;
@@ -158,23 +197,32 @@ export async function registerFcmTokenOnServer(token: string): Promise<boolean> 
 }
 
 /**
- * Remove a stored FCM token (e.g. on logout or when token is invalidated).
+ * Stop push on this device only (other devices of the same user keep it).
+ * Works while signed out too: deleting the token at FCM makes it invalid, and
+ * the server prunes it on the next send.
  */
 export async function removeFcmToken(): Promise<boolean> {
+  const stored = readStoredToken();
+  writeStoredToken(null);
+  let ok = true;
+  if (stored?.token) {
+    try {
+      const result = await apiFetch('/api/push/token', {
+        method: 'DELETE',
+        body: JSON.stringify({ token: stored.token }),
+      });
+      ok = result.success;
+    } catch {
+      ok = false;
+    }
+  }
   try {
     const msg = getFirebaseMessaging();
-    if (msg) {
-      await deleteToken(msg).catch(() => false);
-    }
-    // Tell the server to clear the token
-    const result = await apiFetch('/api/users/me', {
-      method: 'PATCH',
-      body: JSON.stringify({ fcmToken: '' }),
-    });
-    return result.success;
+    if (msg) await deleteToken(msg);
   } catch {
-    return false;
+    // Already gone.
   }
+  return ok;
 }
 
 /**

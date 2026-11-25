@@ -52,7 +52,7 @@ export function usePushNotifications() {
         setStatus(readPermission());
         return false;
       }
-      const registered = await registerFcmTokenOnServer(token);
+      const registered = await registerFcmTokenOnServer(token, { force: true });
       if (!registered) return false;
 
       window.localStorage.removeItem(DISABLED_KEY);
