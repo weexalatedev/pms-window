@@ -27,7 +27,7 @@ export default function FCMProvider() {
     let unregisterPushEnabled: (() => void) | null = null;
 
     const setup = async () => {
-      const { getPushPermission, onForegroundMessage, registerFcmTokenOnServer, requestFcmToken } =
+      const { getPushPermission, registerFcmTokenOnServer, requestFcmToken } =
         await import('@/lib/firebase');
       if (cancelled) return;
 
@@ -41,41 +41,17 @@ export default function FCMProvider() {
         await registerFcmTokenOnServer(token);
       };
 
-      // Foreground messages (data-only payloads from the server).
-      unsubscribe = onForegroundMessage((payload) => {
-        const data = payload.data || {};
-        const title = data.title || payload.notification?.title;
+      // The service worker shows every push as a system notification (iOS
+      // requires that) and posts it here so the in-app bell updates live.
+      const handleWorkerMessage = (event: MessageEvent) => {
+        const message = event.data as { type?: string; data?: Record<string, string> } | null;
+        if (!message || message.type !== 'pms-push') return;
+        const data = message.data || {};
+        const title = data.title;
         if (!title) return;
 
-        const body = data.body || payload.notification?.body || '';
+        const body = data.body || '';
         const link = data.url || data.click_action || '/';
-        const priority = data.priority || 'normal';
-
-        // While the user is actively looking at the app, low-priority FYI
-        // pushes only update the bell — no system popup interrupting work.
-        const userIsLooking = document.visibilityState === 'visible' && document.hasFocus();
-        const showSystem = !(userIsLooking && priority === 'low');
-
-        if (
-          showSystem &&
-          typeof Notification !== 'undefined' &&
-          Notification.permission === 'granted' &&
-          'serviceWorker' in navigator
-        ) {
-          navigator.serviceWorker.ready
-            .then((registration) =>
-              registration.showNotification(title, {
-                body,
-                icon: '/icons/icon-192x192.png',
-                badge: '/icons/icon-192x192.png',
-                tag: data.tag || undefined,
-                renotify: Boolean(data.tag),
-                requireInteraction: priority === 'high',
-                data: { ...data, url: link },
-              } as NotificationOptions)
-            )
-            .catch((error) => console.warn('[FCM] Foreground notification failed:', error));
-        }
 
         window.dispatchEvent(
           new CustomEvent('pms-notification', {
@@ -88,7 +64,12 @@ export default function FCMProvider() {
             },
           })
         );
-      });
+      };
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', handleWorkerMessage);
+        unsubscribe = () => navigator.serviceWorker.removeEventListener('message', handleWorkerMessage);
+      }
 
       void registerIfAllowed();
       window.addEventListener('pms-push-enabled', registerIfAllowed);

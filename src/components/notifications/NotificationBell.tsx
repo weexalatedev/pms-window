@@ -317,7 +317,9 @@ export function NotificationBell() {
                   <BellOff className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
                 )}
                 <span className="text-[9px] font-mono text-primary-500 truncate">
-                  {!push.supported
+                  {push.needsInstall
+                    ? 'iPhone/iPad: tap Share → Add to Home Screen, then open the app from there to enable push'
+                    : !push.supported
                     ? 'Push not supported on this browser'
                     : push.denied
                     ? 'Notifications blocked in browser settings'
