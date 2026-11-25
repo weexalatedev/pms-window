@@ -78,7 +78,9 @@ export function PushNotificationTester() {
     }
   };
 
-  const statusLabel = !push.supported
+  const statusLabel = push.needsInstall
+    ? 'On iPhone/iPad, tap Share → Add to Home Screen and open the app from there to enable push'
+    : !push.supported
     ? 'Push is not supported in this browser'
     : push.denied
     ? 'Notifications are blocked in browser settings'

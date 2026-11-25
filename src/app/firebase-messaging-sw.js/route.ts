@@ -15,6 +15,53 @@ export async function GET() {
   }
 
   const workerScript = `
+// Our push handler is registered BEFORE the Firebase SDK loads so it runs
+// first and stops Firebase's own handler. Firebase skips the notification
+// whenever an app window is open, but Safari/iOS requires every push to show
+// one (userVisibleOnly) and revokes the subscription after a few silent pushes.
+// So we always show it here, and tell open windows so the in-app bell updates.
+self.addEventListener('push', (event) => {
+  event.stopImmediatePropagation();
+
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (e) {
+    payload = { data: { body: event.data ? event.data.text() : '' } };
+  }
+  const data = payload.data || {};
+  const notification = payload.notification || {};
+  const title = data.title || notification.title || 'Unique Arts PMS';
+  const body = data.body || notification.body || '';
+  const priority = data.priority || 'normal';
+  const tag = data.tag || undefined;
+  const url = data.url || data.click_action || '/';
+
+  const show = self.registration.showNotification(title, {
+    body,
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-192x192.png',
+    tag,
+    // Re-alert when a grouped notification is replaced with newer info.
+    renotify: Boolean(tag) && priority !== 'low',
+    // Urgent items stay on screen until handled; FYI items arrive quietly.
+    requireInteraction: priority === 'high',
+    silent: priority === 'low',
+    timestamp: Date.now(),
+    data: Object.assign({}, data, { url }),
+  });
+
+  const informWindows = self.clients
+    .matchAll({ type: 'window', includeUncontrolled: true })
+    .then((windowClients) => {
+      windowClients.forEach((client) =>
+        client.postMessage({ type: 'pms-push', data: Object.assign({}, data, { title, body, url }) })
+      );
+    });
+
+  event.waitUntil(Promise.all([show, informWindows]));
+});
+
 importScripts('https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/12.14.0/firebase-messaging-compat.js');
 
@@ -22,32 +69,9 @@ importScripts('https://www.gstatic.com/firebasejs/12.14.0/firebase-messaging-com
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+// Firebase stays initialised for token lifecycle handling; delivery is ours.
 firebase.initializeApp(${JSON.stringify(firebaseConfig)});
-const messaging = firebase.messaging();
-
-// The server sends data-only messages; we render them here so each push shows
-// exactly once and we control grouping (tag) and urgency.
-messaging.onBackgroundMessage((payload) => {
-  const data = payload.data || {};
-  const title = data.title || (payload.notification && payload.notification.title) || 'Unique Arts PMS';
-  const body = data.body || (payload.notification && payload.notification.body) || '';
-  const priority = data.priority || 'normal';
-  const tag = data.tag || undefined;
-
-  return self.registration.showNotification(title, {
-    body,
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-192x192.png',
-    tag,
-    // Re-alert when a grouped notification is replaced with newer info.
-    renotify: Boolean(tag) && priority !== 'low',
-    // Urgent items stay on screen until handled; FYI items auto-dismiss.
-    requireInteraction: priority === 'high',
-    silent: priority === 'low',
-    timestamp: Date.now(),
-    data: Object.assign({}, data, { url: data.url || data.click_action || '/' }),
-  });
-});
+firebase.messaging();
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
