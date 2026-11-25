@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { startTransition, useEffect } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function ErrorPage({
   error,
@@ -11,6 +12,8 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const router = useRouter();
+
   useEffect(() => {
     console.error('[App Error]', error);
   }, [error]);
@@ -55,7 +58,14 @@ export default function ErrorPage({
         {/* Actions */}
         <div className="flex gap-3 justify-center">
           <button
-            onClick={reset}
+            onClick={() => {
+              // Server-render errors (e.g. a DB timeout) need a fresh server
+              // request; reset() alone would just re-render the cached error.
+              startTransition(() => {
+                router.refresh();
+                reset();
+              });
+            }}
             className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase border border-primary-300 text-dark-600 hover:border-dark-500 hover:text-dark-500 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
