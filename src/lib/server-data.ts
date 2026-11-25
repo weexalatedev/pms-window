@@ -522,11 +522,21 @@ export async function getDashboardData() {
 // JSON-serializable objects when passing from Server Components to Client
 // Components, and it rejects objects that still carry custom toJSON methods.
 export function serialize<T>(obj: T): T {
-  return toPlainValue(obj) as T;
+  return toPlainValue(obj, new WeakSet()) as T;
 }
 
-function toPlainValue(value: unknown): unknown {
+function toPlainValue(value: unknown, seen: WeakSet<object>): unknown {
   if (value == null) return value;
+
+  // Hydrated Mongoose documents carry internal state ($__, parent refs on
+  // subdocuments) that is circular; convert them to plain data first.
+  if (
+    typeof value === 'object' &&
+    typeof (value as { toObject?: unknown }).toObject === 'function' &&
+    '$__' in (value as object)
+  ) {
+    value = (value as { toObject: (o?: object) => unknown }).toObject({ virtuals: false });
+  }
 
   if (value instanceof Date) {
     return value.toISOString();
@@ -536,22 +546,31 @@ function toPlainValue(value: unknown): unknown {
     return value.toHexString();
   }
 
-  if (Array.isArray(value)) {
-    return value.map(toPlainValue);
-  }
-
   if (typeof value !== 'object') {
     return value;
   }
 
-  const plain: Record<string, unknown> = {};
-  for (const [key, nestedValue] of Object.entries(value)) {
-    if (nestedValue !== undefined) {
-      plain[key] = toPlainValue(nestedValue);
+  // Guard against cycles: drop a back-reference instead of overflowing the stack.
+  if (seen.has(value as object)) return undefined;
+  seen.add(value as object);
+
+  let result: unknown;
+  if (Array.isArray(value)) {
+    result = value.map((item) => toPlainValue(item, seen));
+  } else {
+    const plain: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      if (nestedValue !== undefined) {
+        const converted = toPlainValue(nestedValue, seen);
+        if (converted !== undefined) plain[key] = converted;
+      }
     }
+    result = plain;
   }
 
-  return plain;
+  // Only ancestors count as cycles; the same object may appear in sibling branches.
+  seen.delete(value as object);
+  return result;
 }
 
 function isObjectId(value: unknown): value is { toHexString: () => string } {
