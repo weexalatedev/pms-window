@@ -328,7 +328,7 @@ export function NotificationBell() {
                     : 'Enable push notifications on this device'}
                 </span>
               </div>
-              {push.supported && !push.denied && (
+              {push.supported && !push.denied && !push.needsInstall && (
                 <button
                   type="button"
                   onClick={() => (push.enabled ? push.disable() : push.enable())}

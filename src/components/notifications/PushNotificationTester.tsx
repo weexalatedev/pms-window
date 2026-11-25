@@ -132,14 +132,14 @@ export function PushNotificationTester() {
             <button
               type="button"
               onClick={handleSend}
-              disabled={sending || !push.supported}
+              disabled={sending || !push.supported || push.needsInstall}
               className="inline-flex items-center gap-2 px-3 py-2 text-[10px] font-mono font-bold uppercase tracking-wide bg-dark-500 text-white hover:bg-dark-600 disabled:opacity-40 transition-colors"
             >
               {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
               {sending ? 'Sending…' : push.enabled ? 'Send test push' : 'Enable & send test'}
             </button>
 
-            {!push.enabled && !push.denied && push.supported && (
+            {!push.enabled && !push.denied && push.supported && !push.needsInstall && (
               <button
                 type="button"
                 onClick={() => void push.enable()}

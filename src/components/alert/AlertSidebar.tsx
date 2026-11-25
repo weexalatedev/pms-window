@@ -114,7 +114,7 @@ function AlertCard({
               {ALERT_TYPE_LABEL[alert.type]}
             </p>
             <p className="text-[11px] text-primary-500 mt-0.5 truncate">
-              {typeof alert.projectId === 'object' && 'projectTitle' in alert.projectId
+              {alert.projectId !== null && typeof alert.projectId === 'object' && 'projectTitle' in alert.projectId
                 ? (alert.projectId as { projectTitle: string }).projectTitle
                 : 'Project'}
             </p>
@@ -138,7 +138,7 @@ function AlertCard({
             <div className="flex items-center gap-2 text-[11px] text-primary-500">
               <span className="font-mono">RAISED BY</span>
               <span className="font-medium text-dark-600">
-                {typeof alert.raisedBy === 'object' && 'name' in alert.raisedBy
+                {alert.raisedBy !== null && typeof alert.raisedBy === 'object' && 'name' in alert.raisedBy
                   ? (alert.raisedBy as { name: string }).name
                   : 'Admin'}
               </span>
